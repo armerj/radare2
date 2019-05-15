@@ -684,7 +684,7 @@ static int cmd_yank(void *data, const char *input) {
 		if (input[1] == 'f') { // "wtf"
 			ut64 tmpsz;
 			const char *file = r_str_trim_ro (input + 2);
-			const ut8 *tmp = r_buf_buffer (core->yank_buf, &tmpsz);
+			const ut8 *tmp = r_buf_data (core->yank_buf, &tmpsz);
 			if (!r_file_dump (file, tmp, tmpsz, false)) {
 				eprintf ("Cannot dump to '%s'\n", file);
 			}
@@ -2041,6 +2041,9 @@ static int r_core_cmd_subst(RCore *core, char *cmd) {
 				*http = 0;
 			}
 		}
+		r_cons_printf ("HTTP/1.0 %d %s\r\n%s"
+				"Connection: close\r\nContent-Length: %d\r\n\r\n",
+				200, "OK", "", -1);
 		return r_core_cmd0 (core, cmd);
 	}
 
