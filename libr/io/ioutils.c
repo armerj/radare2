@@ -31,8 +31,8 @@ R_API bool r_io_is_valid_offset(RIO* io, ut64 offset, int hasperm) {
 	if (!io->desc) {
 		return false;
 	}
-	if (offset <= r_io_desc_size (io->desc)) {
-		return true;
+	if (offset > r_io_desc_size (io->desc)) {
+		return false;
 	}
 	return ((io->desc->perm & hasperm) == hasperm);
 }
