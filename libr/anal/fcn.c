@@ -1006,10 +1006,6 @@ static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut64 len, int
 		return R_ANAL_RET_ERROR; // MUST BE TOO DEEP
 	}
 
-	if (!noncode && anal->cur && anal->cur->is_valid_offset && !anal->cur->is_valid_offset (anal, addr, 0)) {
-		return R_ANAL_RET_END;
-	}
-
 	// check if address is readable //:
 	if (!anal->iob.is_valid_offset (anal->iob.io, addr, 0)) {
 		if (addr != UT64_MAX && !anal->iob.io->va) {
@@ -1080,6 +1076,7 @@ repeat:
 
 		if (ret < 0) {
 			eprintf ("Failed to read\n");
+			break;
 		}
 		if (isInvalidMemory (buf, bytes_read)) {
 			FITFCNSZ ();
