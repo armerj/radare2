@@ -194,7 +194,7 @@ static _MC81F4204_op_t _MC81F4204_ops[] = {
     {0x77, OP_OR, "or A, [ [rpr + 0x%02x] ] + Y", 2, NO_FLAGS, NO_MASK},
     {0x74, OP_OR, "or A, [rpr + X]", 1, NO_FLAGS, NO_MASK},    
     // ROL, rotate left through carry
-    {0x28, OP_ROL, "rol A", 1, NO_MASK},
+    {0x28, OP_ROL, "rol A", 1, NO_FLAGS, NO_MASK},
     {0x29, OP_ROL, "rol [rpr + 0x%02x]", 2, NO_FLAGS, NO_MASK},
     {0x39, OP_ROL, "rol [rpr + 0x%02x + X]", 2, NO_FLAGS, NO_MASK},
     {0x38, OP_ROL, "rol [0x%04x]", 3, NO_FLAGS, NO_MASK},    
@@ -270,12 +270,12 @@ static _MC81F4204_op_t _MC81F4204_ops[] = {
     {0x8e, OP_T, "txsp", 1, NO_FLAGS, NO_MASK},
     {0xbf, OP_T, "tya", 1, NO_FLAGS, NO_MASK},
     // Exchange between registers and memory
-    {0xee, OP_X, "xax", NO_FLAGS, NO_MASK}, // Exchange A and X
-    {0xde, OP_X, "xay", NO_FLAGS, NO_MASK},
+    {0xee, OP_X, "xax", 1, NO_FLAGS, NO_MASK}, // Exchange A and X
+    {0xde, OP_X, "xay", 1, NO_FLAGS, NO_MASK},
     {0xbc, OP_X, "xma [rpr + 0x%02x]", 2, NO_FLAGS, NO_MASK},
     {0xad, OP_X, "xma [rpr + 0x%02x + X]", 2, NO_FLAGS, NO_MASK},
     {0xbb, OP_X, "xma X", 1, NO_FLAGS, NO_MASK},
-    {0xfe, OP_X, "xyx", NO_FLAGS, NO_MASK},
+    {0xfe, OP_X, "xyx", 1, NO_FLAGS, NO_MASK},
     
     // 16-bit Manipulation
     {0x1d, OP_ADD, "addw YA, word [rpr + 0x%02x]", 2, NO_FLAGS, NO_MASK},
@@ -288,7 +288,7 @@ static _MC81F4204_op_t _MC81F4204_ops[] = {
 
     // Bit Manipulation
     // other ops AND1B, EOR1B, LDCB, OR1B
-    {0x8b, OP_AND, "and1 C, %s[0x%04x].%u", 3, M_BIT_POS_B, NO_MASK}, // TODO verify, I believe it is fixed
+    {0x8b, OP_AND, "and1 C, %s[0x%04x].%d", 3, M_BIT_POS_B, NO_MASK}, // TODO verify, I believe it is fixed
     // I beleive that the highest nibble is used to choose bit and determine AND1 or AND1B
     // 0xF000 & M = flags, likey 1110 is the mask for the bit, and 0001 is the mask for Not opertation
 
@@ -298,15 +298,15 @@ static _MC81F4204_op_t _MC81F4204_ops[] = {
     {0x20, OP_CLR, "clrc", 1, NO_FLAGS, NO_MASK},
     {0x40, OP_CLR, "clrg", 1, NO_FLAGS, NO_MASK}, 
     {0x80, OP_CLR, "clrv", 1, NO_FLAGS, NO_MASK},
-    {0xab, OP_EOR, "eor1 C, %s[0x%04x].%u", 3, M_BIT_POS_B, NO_MASK},
+    {0xab, OP_EOR, "eor1 C, %s[0x%04x].%d", 3, M_BIT_POS_B, NO_MASK},
  
-    {0xcb, OP_LD, "ldc [0x%04x].%u", 3, M_BIT_POS_B, NO_MASK},
-    {0x4b, OP_NOT, "not1 [0x%04x].%u", 3, M_BIT_POS, NO_MASK},
-    {0x6b, OP_OR, "or1 C, [0x%04x].%u", 3, M_BIT_POS_B, NO_MASK},
+    {0xcb, OP_LD, "ldc [0x%04x].%d", 3, M_BIT_POS, NO_MASK}, // should these be %02 not %04
+    {0x4b, OP_NOT, "not1 [0x%04x].%d", 3, M_BIT_POS, NO_MASK},
+    {0x6b, OP_OR, "or1 C, %s[0x%04x].%d", 3, M_BIT_POS_B, NO_MASK},
     {0x0b, OP_SET, "set A.%u", 2, BYTE_BIT_POS, NO_MASK},
     {0xa0, OP_SET, "setc", 1, NO_FLAGS, NO_MASK},
     {0xc0, OP_SET, "setg", 1, NO_FLAGS, NO_MASK},
-    {0xeb, OP_ST, "st1 [0x%04x].%u, C", 3, M_BIT_POS, NO_MASK},
+    {0xeb, OP_ST, "st1 [0x%04x].%d, C", 3, M_BIT_POS, NO_MASK},
     {0x5c, OP_TCLR, "tclr [0x%04x]", 3, NO_FLAGS, NO_MASK}, // A - (M), (M) <- (M) \/ ~(A)
     {0x3c, OP_TSET, "tset [0x%04x]", 3, NO_FLAGS, NO_MASK}, // A - (M), (M) <- (M) \/ (A)
 

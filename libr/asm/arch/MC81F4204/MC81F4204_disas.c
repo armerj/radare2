@@ -56,21 +56,21 @@ int _MC81F4204_disas(ut64 pc, RAsmOp *op, const ut8 *buf, ut64 len) {
                 } else if (flag == CMP_REL_JMP) {
                     disasm = r_str_newf(name, buf[1], rel_jmp_addr(pc + 3, buf[2]));
                 } else if (flag == M_BIT_POS_B) {
-                    ut16 imm_addr = buf[2] & 0x0F;
+                    ut16 imm_addr = buf[1] + ((buf[2] & 0x0F) << 8);
                  
                     // TODO need to verify this is how the bit are determined
                     // other address opcodes use H byte, L byte
                     if ((buf[2] & 0x10) == 0x10) {
-                        disasm = r_str_newf(name, "~", buf[1] + (imm_addr << 8), buf[2] >> 5);
+                        disasm = r_str_newf(name, "~", imm_addr, buf[2] >> 5);
                     } else {
-                        disasm = r_str_newf(name, "", buf[1] + (imm_addr << 8), buf[2] >> 5);
+                        disasm = r_str_newf(name, "", imm_addr, buf[2] >> 5);
                     }
                 } else if (flag == M_BIT_POS) {
                     ut16 imm_addr = buf[2] & 0x0F;
                  
                     // TODO need to verify this is how the bit are determined
                     // other address opcodes use H byte, L byte
-                    disasm = r_str_newf(name, "~", buf[1] + (imm_addr << 8), buf[2] >> 5);
+                    disasm = r_str_newf(name, buf[1] + (imm_addr << 8), buf[2] >> 5);
                 } else if (flag == BRANCH_BIT_IN_OP) { // TODO do not determine address, just put offset
                     disasm = r_str_newf(name, buf[1], buf[0] >> 5, rel_jmp_addr(pc + 2, buf[2]));
                 } else if (flag == IMM_VALUE) {
