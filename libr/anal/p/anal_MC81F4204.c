@@ -949,7 +949,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 
 	// BRK
 	case 0x0F:
-		op->type = R_ANAL_OP_TYPE_UCALL; // Change if able to determine how to read from BRK vector
+		op->type = R_ANAL_OP_TYPE_SWI; // Change if able to determine how to read from BRK vector
 		//op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
 		op->stackop = R_ANAL_STACK_INC;
 		op->stackptr = 2;
@@ -959,7 +959,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 
 	// DI
 	case 0x60:
-		op->type = R_ANAL_OP_TYPE_STORE:
+		op->type = R_ANAL_OP_TYPE_STORE: // Should these be NOPs
 		
 		r_strbuf_set (&op->esil, "0, i, ="); 
 		break;
