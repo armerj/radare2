@@ -1,3 +1,21 @@
+// Used 6502 analysis plugin as example https://github.com/radare/radare2/blob/master/libr/anal/p/anal_6502.c
+
+#include <string.h>
+#include <r_types.h>
+#include <r_lib.h>
+#include <r_asm.h>
+#include <r_anal.h>
+#include "../../asm/arch/MC81F4204/MC81F4204_ops.h" // TODO add cycles and mem type into op table
+
+
+static inline ut16 rel_jmp_addr(ut16 pc, ut8 offset) {
+    if (offset < 0x80) {
+        return pc + offset;
+    }
+    offset = 0 - offset;
+    return pc - offset;
+}
+
 static int set_reg_profile(RAnal *anal) {
 	char *p =
 		"=PC	pc\n"
@@ -23,6 +41,7 @@ static int set_reg_profile(RAnal *anal) {
 		"gpr	pch	.8	6	0\n"
 		"gpr	rpr	.8	7	0\n"
 		"gpr	t	.8	8	0\n"; // temp register to make things easier
+								  // TODO add memory register that we can store memory addresses into for ease of use, 8 and 16 bit
 	return r_reg_set_profile_string (anal->reg, p);
 }
 
@@ -41,35 +60,6 @@ static int esil_MC81F4204_init (RAnalEsil *esil) {
 	return true;
 }
 
-
-static int esil_MC81F4204_fini (RAnalEsil *esil) {
-	return true;
-}
-
-
-RAnalPlugin r_anal_plugin_MC81F4204 = {
-	.name = "MC81F4204",
-	.desc = "ABOV MC81F4204",
-	.license = "",
-	.arch = "MC81F4204",
-	.bits = 8,
-	.op = &_MC81F4204_op,
-	.set_reg_profile = &set_reg_profile,
-	.esil = true,
-	.esil_init = esil_MC81F4204_init,
-	.esil_fini = esil_MC81F4204_fini,
-};
-
-
-#ifndef CORELIB
-R_API RLibStruct radare_plugin = {
-	.type = R_LIB_TYPE_ANAL,
-	.data = &r_anal_plugin_MC81F4204,
-	.version = R2_VERSION
-};
-#endif
-
-
 static char* _MC81F4204_mem_access[] = {
 	"%s,", // immediate
 	"rpr, 8, <<, %s, +, [1],", // dp
@@ -81,7 +71,7 @@ static char* _MC81F4204_mem_access[] = {
 	"" // {X}
 }
 
-
+//********************* Move to asm ops table
 typedef struct {
 	ut8 op;
 	ut8 len;
@@ -96,17 +86,18 @@ static _MC81F4204_esil_t _MC81F4204_esil[] = {
 	{0x04, 2, 2, 0},
 
 }
+//*********************
 
 // from https://github.com/radare/radare2/blob/master/libr/anal/p/anal_6502.c
 enum {  // TODO need H, and V
-	_6502_FLAGS_C = (1 << 0),
-	_6502_FLAGS_B = (1 << 1),
-	_6502_FLAGS_Z = (1 << 2),
-	_6502_FLAGS_N = (1 << 3),
+	_MC81F4204_FLAGS_C = (1 << 0),
+	_MC81F4204_FLAGS_B = (1 << 1),
+	_MC81F4204_FLAGS_Z = (1 << 2),
+	_MC81F4204_FLAGS_N = (1 << 3),
 
-	_6502_FLAGS_NZ = (_6502_FLAGS_Z | _6502_FLAGS_N),
-	_6502_FLAGS_CNZ = (_6502_FLAGS_C | _6502_FLAGS_Z | _6502_FLAGS_N),
-	_6502_FLAGS_BNZ = (_6502_FLAGS_B | _6502_FLAGS_Z | _6502_FLAGS_N),
+	_MC81F4204_FLAGS_NZ = (_MC81F4204_FLAGS_Z | _MC81F4204_FLAGS_N),
+	_MC81F4204_FLAGS_CNZ = (_MC81F4204_FLAGS_C | _MC81F4204_FLAGS_Z | _MC81F4204_FLAGS_N),
+	_MC81F4204_FLAGS_BNZ = (_MC81F4204_FLAGS_B | _MC81F4204_FLAGS_Z | _MC81F4204_FLAGS_N),
 };
 
 
@@ -360,19 +351,745 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x78:
 		// TODO
 
-	
+	// SBC
+	case 0x24:
+	case 0x25:
+	case 0x26:
+	case 0x27:
+	case 0x35:
+	case 0x36:
+	case 0x37:
+	case 0x34:
+		// TODO
 
+	// TST
+	case 0x4C:
+		 // TODO  op->type = R_ANAL_OP_TYPE_OR;
+
+		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		r_strbuf_append (&op->esil,  ", 0, -"); 
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;		
+
+	// XCN, exchange nibbles in A
+	case 0xCE:
+		 // TODO  op->type =R_ANAL_OP_TYPE_OR;
+		// TODO, t=a, a << 4, t >> 4, a += t
+
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;		
+
+	// LDA
+	case 0xC4:
+	case 0xC5:
+	case 0xC6:
+	case 0xC7:
+	case 0xD5:
+	case 0xD6:
+	case 0xD7:
+	case 0xD4:
+		op->type = R_ANAL_OP_TYPE_LOAD;
+
+		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		r_strbuf_append (&op->esil,  ", a, ="); 
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// LDM
+	case 0xE4:
+		op->type = R_ANAL_OP_TYPE_LOAD;
+
+		r_strbuf_set (&op->esil, "%s, dp, =[1]", data[1]); // TODO fix dp
+		break;	
+		
+	// LDX
+	case 0x1E:
+	case 0xCC:
+	case 0xCD:
+	case 0xDC:
+		op->type = R_ANAL_OP_TYPE_LOAD;
+
+		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		r_strbuf_append (&op->esil,  ", x, ="); 
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+		
+	// LDY
+	case 0x3E:
+	case 0xC9:
+	case 0xD9:
+	case 0xD8:
+		op->type = R_ANAL_OP_TYPE_LOAD;
+
+		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		r_strbuf_append (&op->esil,  ", y, ="); 
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// STA
+	case 0xE5:
+	case 0xE6:
+	case 0xE7:
+	case 0xF5:
+	case 0xF6:
+	case 0xF7:
+	case 0xF4:
+	case 0xFB:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		r_strbuf_set (&op->esil, "a, mem, =[1]", data[1]); // TODO fix mem
+		break;	
+
+	// STX
+	case 0xEC:
+	case 0xED:
+	case 0xFC:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		r_strbuf_set (&op->esil, "x, mem, =[1]", data[1]); // TODO fix mem
+		break;	
+
+	// STY
+	case 0xE9:
+	case 0xF9:
+	case 0xF8:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		r_strbuf_set (&op->esil, "y, mem, =[1]", data[1]); // TODO fix mem
+		break;	
+
+	// TAX transfer A to X
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "a, x, =");
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// TAY
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "a, y, =");
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// TSPX 
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "sp, x, =");
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// TXA 
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "x, a, =");
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// TXSP
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "x, sp, =");
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// TYA
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "y, a, =");
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// XAX Exchange A and X
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "a, t, =, x, a, =, t, x, =");
+		break;	
+
+	// XAY
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "a, t, =, y, a, =, t, y, =");
+		break;	
+
+	// XMA
+	case 0xBC:
+	case 0xAD:
+	case 0xBB:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "a, t, =, mem, a, =, t,mem, ="); // TODO fix mem
+		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;	
+
+	// XYX
+	case 0xE8:
+		op->type = R_ANAL_OP_TYPE_MOV;
+
+		r_strbuf_set (&op->esil, "x, t, =, y, x, =, t, y, =");
+		break;	
+
+	// ADDW 16bit opcode
+	case 0x1D:
+		op->type = R_ANAL_OP_TYPE_ADD;
+		
+		// TODO
+		// FLAGS
+		break;
+		
+	// CMPW
+	case 0x5D:
+		op->type = R_ANAL_OP_TYPE_CMP;
+
+		// TODO
+		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZC);
+		break;
+		
+	// DECW
+	case 0xBD:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		// TODO
+		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;
+		
+	// INCW
+	case 0x9D:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		// TODO
+		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;
+		
+	// LDYA
+	case 0x7D:
+		op->type = R_ANAL_OP_TYPE_LOAD;
+
+		// TODO
+		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;
+		
+	// STYA
+	case 0xDD:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		// TODO
+		break;
+		
+	// SUBW
+	case 0x3D:
+		op->type = R_ANAL_OP_TYPE_SUB;
+
+		// TODO
+		// FLAGS
+		break;
+
+	// AND1
+	case 0x8B:
+		op->type = R_ANAL_OP_TYPE_AND;
+		// TODO function to determine M
+		// TODO function to determine AND1 or AND1B
+
+		break;
+
+	// BIT
+	case 0x0C:
+	case 0x1C:
+		op->type = R_ANAL_OP_TYPE_AND;
+		// TODO function to determine M
+		// TODO function to determine AND1 or AND1B
+
+		break;
+
+	// CLR1
+	case 0x11:
+	case 0x31:
+	case 0x51:
+	case 0x71:
+	case 0x91:
+	case 0xB1:
+	case 0xD1:
+	case 0xF1:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		// TODO same as BIT
+		break;
+
+	// CLRA1
+	case 0x2B:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		// TODO same as BIT
+		break;
+	
+	// CLRC
+	case 0x20:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		r_strbuf_set (&op->esil, "0, c, ="); 
+		break;
+	
+	// CLRG
+	case 0x20:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		r_strbuf_set (&op->esil, "0, g, ="); 
+		break;
+	
+	// CLRV
+	case 0x20:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		r_strbuf_set (&op->esil, "0, v, ="); 
+		break;
+	
+	// EOR1
+	case 0xAB:
+		op->type = R_ANAL_OP_TYPE_XOR;
+		// TODO function to determine M
+		// TODO function to determine AND1 or AND1B
+
+		break;
+
+	// LDC
+	case 0xCB:
+		op->type = R_ANAL_OP_TYPE_LOAD;
+		// TODO function to determine M
+		// TODO function to determine AND1 or AND1B
+
+		break;
+
+	// NOT1
+	case 0xCB:
+		op->type = R_ANAL_OP_TYPE_STORE;
+		// TODO function to determine M
+
+		break;
+
+	// OR1
+	case 0x6B:
+		op->type = R_ANAL_OP_TYPE_OR;
+		// TODO function to determine M
+		// TODO function to determine AND1 or AND1B
+
+		break;
+
+	// SET1
+	case 0x01:
+	case 0x21:
+	case 0x41:
+	case 0x61:
+	case 0x81:
+	case 0xA1:
+	case 0xC1:
+	case 0xE1:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		// TODO same as BIT
+		break;
+
+	// SETC 
+	case 0xA0:
+		op->type = R_ANAL_OP_TYPE_STORE; // TODO 6502 has these as NOPs and updates flags
+
+		r_strbuf_set (&op->esil, "1, c, ="); 
+		break;
+	
+	// SETG
+	case 0xC0:
+		op->type = R_ANAL_OP_TYPE_STORE;
+
+		r_strbuf_set (&op->esil, "1, g, ="); 
+		break;
+
+	// STC, Store C Flag
+	case 0xEB:
+		op->type = R_ANAL_OP_TYPE_STORE;
+		// TODO function to determine M
+
+		break;
+
+	// TCLR1, Test and Clear bits with A
+	case 0x5C:
+		op->type = R_ANAL_OP_TYPE_CMP;
+		// TODO
+
+		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;
+
+	// TSET1
+	case 0x3C:
+		op->type = R_ANAL_OP_TYPE_CMP;
+		// TODO
+
+		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		break;
+
+	// BBC
+	case 0x12:
+	case 0x32:
+	case 0x52:
+	case 0x72:
+	case 0x92:
+	case 0xB2:
+	case 0xD2:
+	case 0xF2: 
+	case 0x13:
+	case 0x33:
+	case 0x53:
+	case 0x73:
+	case 0x93:
+	case 0xB3:
+	case 0xD3:
+	case 0xF3: 
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code, do code for both A and dp
+		break;
+
+	// BBS
+	case 0x02:
+	case 0x22:
+	case 0x42:
+	case 0x62:
+	case 0x82:
+	case 0xA2:
+	case 0xC2:
+	case 0xE2:
+	case 0x03:
+	case 0x23:
+	case 0x43:
+	case 0x63:
+	case 0x83:
+	case 0xA3:
+	case 0xC3:
+	case 0xE3:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code, do code for both A and dp
+		break;
+
+	// BCC
+	case 0x50:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BCS
+	case 0xD0:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BEQ
+	case 0xF0:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BMI
+	case 0x90:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BNE
+	case 0x70:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BPL
+	case 0x10:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BCC
+	case 0x50:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BRA, branch always
+	case 0x2F:
+		op->type = R_ANAL_OP_TYPE_JMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		
+		// TODO jump code
+		break;
+
+	// BVC
+	case 0x30:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// BVS
+	case 0xB0:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// CALL !abs
+	case 0x3B:
+		op->type = R_ANAL_OP_TYPE_CALL;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 2;
+		op->jump = (data[1] + (data[2] << 8);
+
+		// TODO call code
+		break;
+		
+	// CALL dp
+	case 0x3B:
+		op->type = R_ANAL_OP_TYPE_UCALL; // unknown call 
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 2;
+
+		// TODO call code
+		break;
+
+	// CBNE, Compare and branch if not equal
+	case 0xFD:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// DBNE, Decrement and branch if not equal
+	case 0xAC:
+	case 0x7B:
+		op->type = R_ANAL_OP_TYPE_CJMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->fail = addr + op->size;
+		
+		// TODO jump code
+		break;
+
+	// JMP
+	case 0x1B:
+		op->type = R_ANAL_OP_TYPE_JMP;
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		
+		// TODO jump code
+		break;
+
+	// JMP [mem]
+	case 0x1F:
+	case 0x3F:
+		op->type = R_ANAL_OP_TYPE_UJMP; // unknown jump
+		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		
+		// TODO jump code
+		break;
+
+	// PCALL
+	case 0x1F:
+	case 0x3F:
+		op->type = R_ANAL_OP_TYPE_UCALL; // Change if able to determine how to read P call address
+		//op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 2;
+		
+		// TODO jump code
+		break;
+
+	// TCALL
+	case 0x1F:
+	case 0x3F:
+		op->type = R_ANAL_OP_TYPE_UCALL; // Change if able to determine how to read T call address
+		//op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 2;
+		
+		// TODO jump code
+		break;
+
+	// BRK
+	case 0x0F:
+		op->type = R_ANAL_OP_TYPE_UCALL; // Change if able to determine how to read from BRK vector
+		//op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 2;
+		
+		// TODO jump code
+		break;
+
+	// DI
+	case 0x60:
+		op->type = R_ANAL_OP_TYPE_STORE:
+		
+		r_strbuf_set (&op->esil, "0, i, ="); 
+		break;
+
+	// EI
+	case 0xE0:
+		op->type = R_ANAL_OP_TYPE_STORE:
+		
+		r_strbuf_set (&op->esil, "1, i, ="); 
+		break;
+
+	// NOP
+	case 0xFF:
+		op->type = R_ANAL_OP_TYPE_NOP:
+		
+		r_strbuf_set (&op->esil, "1, i, ="); 
+		break;
+
+	// POP
+	case 0x0D:
+		op->type = R_ANAL_OP_TYPE_POP;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -1;
+
+		// TODO pop command
+		break;
+
+	case 0x2D:
+		op->type = R_ANAL_OP_TYPE_POP;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -1;
+
+		// TODO pop command
+		break;
+
+	case 0x4D:
+		op->type = R_ANAL_OP_TYPE_POP;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -1;
+
+		// TODO pop command
+		break;
+
+	case 0x6D:
+		op->type = R_ANAL_OP_TYPE_POP;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -1;
+
+		// TODO pop command
+		break;
+
+	// PUSH
+	case 0x0E:
+		op->type = R_ANAL_OP_TYPE_PUSH;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 1;
+
+		// TODO push command
+		break;
+
+	case 0x2E:
+		op->type = R_ANAL_OP_TYPE_PUSH;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 1;
+
+		// TODO push command
+		break;
+
+	case 0x4E:
+		op->type = R_ANAL_OP_TYPE_PUSH;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 1;
+
+		// TODO push command
+		break;
+
+	case 0x6E:
+		op->type = R_ANAL_OP_TYPE_PUSH;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = 1;
+
+		// TODO push command
+		break;
+
+	// RET
+	case 0x6F:
+		op->type = R_ANAL_OP_TYPE_RET;
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -2;
+
+		// TODO ret command
+		break;
+
+	// RETI
+	case 0x7F:
+		op->type = R_ANAL_OP_TYPE_RET; // TODO is there a return from interrupt
+		op->stackop = R_ANAL_STACK_INC;
+		op->stackptr = -2;
+
+		// TODO ret command
+		break;
+
+	// STOP
+	case 0xEF:
+		op->type = R_ANAL_OP_TYPE_NOP; // TODO is there a STOP
+		break;
+	}
+	return op->size;
 }
 
+static int esil_MC81F4204_fini (RAnalEsil *esil) {
+	return true;
+}
 
+RAnalPlugin r_anal_plugin_MC81F4204 = {
+	.name = "MC81F4204",
+	.desc = "MC81F4204 G810 Core analysis plugin",
+	.license = "",
+	.arch = "MC81F4204",
+	.bits = 8,
+	.op = &_MC81F4204_op,
+	.set_reg_profile = &set_reg_profile,
+	.esil = false, // change to true once all commands are complete
+	//.esil_init = esil_6502_init,
+	//.esil_fini = esil_6502_fini,
+};
 
-
-
-
-
-
-
-
-
-
-
+#ifndef CORELIB
+R_API RLibStruct radare_plugin = {
+	.type = R_LIB_TYPE_ANAL,
+	.data = &r_anal_plugin_MC81F4204,
+	.version = R2_VERSION
+};
