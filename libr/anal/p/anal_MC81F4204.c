@@ -5,16 +5,8 @@
 #include <r_lib.h>
 #include <r_asm.h>
 #include <r_anal.h>
-#include "../../asm/arch/MC81F4204/MC81F4204_ops.h" // TODO add cycles and mem type into op table
+#include "../../asm/arch/MC81F4204/MC81F4204_ops.h"
 
-
-static inline ut16 rel_jmp_addr(ut16 pc, ut8 offset) {
-    if (offset < 0x80) {
-        return pc + offset;
-    }
-    offset = 0 - offset;
-    return pc - offset;
-}
 
 static int set_reg_profile(RAnal *anal) {
 	char *p =
@@ -60,7 +52,7 @@ static int esil_MC81F4204_init (RAnalEsil *esil) {
 	return true;
 }
 
-static char* _MC81F4204_mem_access[] = {
+/*static char* _MC81F4204_mem_access[] = {
 	"%s,", // immediate
 	"rpr, 8, <<, %s, +, [1],", // dp
 	"%s, x, +, 0xff, &, rpr, 8, <<, +, [1],", // dp + X
@@ -69,24 +61,8 @@ static char* _MC81F4204_mem_access[] = {
 	"", // [dp + X]
 	"", // [dp] + Y
 	"" // {X}
-}
+}*/
 
-//********************* Move to asm ops table
-typedef struct {
-	ut8 op;
-	ut8 len;
-	ut8 cycles;
-	ut8 memType;
-} _MC81F4204_esil_t;
-
-static _MC81F4204_esil_t _MC81F4204_esil[] = {
-	// byte op, num of bytes, num of cycles, mem access type
-
-	// ADC
-	{0x04, 2, 2, 0},
-
-}
-//*********************
 
 // from https://github.com/radare/radare2/blob/master/libr/anal/p/anal_6502.c
 enum {  // TODO need H, and V
@@ -104,20 +80,24 @@ enum {  // TODO need H, and V
 static void _MC81F4204_anal_update_flags(RAnalOp *op, int flags) {
 	/* FIXME: 9,$b instead of 8,$b to prevent the bug triggered by: A = 0 - 0xff - 1 */
 	if (flags & _MC81F4204_FLAGS_B) {
-		r_strbuf_append (&op->esil, ",9,$b,C,:=");
+		// r_strbuf_append (&op->esil, ",9,$b,C,:=");
 	}
 	if (flags & _MC81F4204_FLAGS_C) {
-		r_strbuf_append (&op->esil, ",7,$c,C,:=");
+		// r_strbuf_append (&op->esil, ",7,$c,C,:=");
 	}
 	if (flags & _MC81F4204_FLAGS_Z) {
-		r_strbuf_append (&op->esil, ",$z,Z,:=");
+		// r_strbuf_append (&op->esil, ",$z,Z,:=");
 	}
 	if (flags & _MC81F4204_FLAGS_N) {
-		r_strbuf_append (&op->esil, ",$s,N,:=");
+		// r_strbuf_append (&op->esil, ",$s,N,:=");
 	}
 }
 // TODO update 
 
+
+static int _MC81F4204_determine_jmp_addr(ut8 lpc, ut8 hpc) { // Change after virtual addr is enabled
+    return 0x0FFF & ((hpc << 8) | lpc);
+}
 
 static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len, RAnalOpMask mask) {
 	memset(op, '\0', sizeof(RAnalOp));
@@ -128,12 +108,12 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	int i = 0;
 	r_strbuf_init(&op->esil);
 
-	while (_MC81F4204_esil[i].op && _MC81F4204_esil[i].op != data[0]) {
+	while (_MC81F4204_ops[i].op && _MC81F4204_ops[i].op != data[0]) {
 		i++;
 	} // search through array for current opcode esil data
 	
-	op->cycles = _MC81F4204_esil[i].cycles;
-	op->size = _MC81F4204_esil[i].size;
+	op->cycles = _MC81F4204_ops[i].cycles;
+	op->size = _MC81F4204_ops[i].len;
 
 	switch(data[0]) {
 	case 0x00: // unvalid
@@ -153,9 +133,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x14:
 		op->type = R_ANAL_OP_TYPE_ADD;
 		
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]); // Gets memory value
-		r_strbuf_append(&op->esil, ""); // action and flag update
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_CNZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]); // Gets memory value
+		// r_strbuf_append(&op->esil, ""); // action and flag update
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_CNZ);
 		break;
 
 	// AND
@@ -169,26 +149,26 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x94:
 		op->type = R_ANAL_OP_TYPE_AND;
 		
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append(&op->esil, "a, &=");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append(&op->esil, "a, &=");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;
 
 	// ASL 
 	case 0x08:
-		op->type = R_ANAL_OP_TYPE_ASL;
+		op->type = R_ANAL_OP_TYPE_SHL;
 
-		r_strbuf_set (&op->esil,  "a, 1, <<=, 7");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_CNZ);
+		// r_strbuf_set (&op->esil,  "a, 1, <<=, 7");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_CNZ);
 		break;
 	case 0x09:
 	case 0x19:
 	case 0x18:
-		op->type = R_ANAL_OP_TYPE_ASL;
+		op->type = R_ANAL_OP_TYPE_SHL;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", 1, <<=, 7");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_CNZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", 1, <<=, 7");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_CNZ);
 		break;
 
 	// CMP, (A) - (M)
@@ -202,9 +182,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x54:
 		op->type = R_ANAL_OP_TYPE_CMP;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", a, ==");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_BNZ); // B because we are subtracting
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", a, ==");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_BNZ); // B because we are subtracting
 		break;
 
 	//CMPX
@@ -213,9 +193,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x7C:
 		op->type = R_ANAL_OP_TYPE_CMP;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", x, ==");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_BNZ); // B because we are subtracting
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", x, ==");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_BNZ); // B because we are subtracting
 		break;
 
 	//CMPY
@@ -224,18 +204,18 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x9C:
 		op->type = R_ANAL_OP_TYPE_CMP;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", y, ==");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_BNZ); // B because we are subtracting
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", y, ==");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_BNZ); // B because we are subtracting
 		break;
 
 	// COM
 	case 0x2C:
 		// TODO op->type
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", !=");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ); 
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", !=");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ); 
 		break;
 	
 	// DEC
@@ -244,26 +224,26 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xBE:
 		op->type = R_ANAL_OP_TYPE_STORE; // Not sure why it is store
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", --="); // [1] I believe since we are sticking it back into memory, TODO check other switch cases. 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", --="); // [1] I believe since we are sticking it back into memory, TODO check other switch cases. 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;		
 	case 0xA9:
 	case 0xB9:
 	case 0xB8:
 		op->type = R_ANAL_OP_TYPE_STORE; // Not sure why it is store
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", --=[1]"); // [1] I believe since we are sticking it back into memory, TODO check other switch cases. 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ); 
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", --=[1]"); // [1] I believe since we are sticking it back into memory, TODO check other switch cases. 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ); 
 		break;
 
 	// DIV
 	case 0x9B:
 		op->type = R_ANAL_OP_TYPE_DIV; // TODO, need to check
-		r_strbuf_set (&op->esil, "ya, x, %, t, =, ya, x, /, a, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NVHZ);
-		r_strbuf_append (&op->esil,  "t, y, =");
+		// r_strbuf_set (&op->esil, "ya, x, %, t, =, ya, x, /, a, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NVHZ);
+		// r_strbuf_append (&op->esil,  "t, y, =");
 		break;
 
 	// EOR
@@ -277,9 +257,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xB4:
 		op->type = R_ANAL_OP_TYPE_XOR;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", a, ^="); 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", a, ^="); 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;
 
 	// INC
@@ -291,34 +271,34 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x9E:
 		op->type = R_ANAL_OP_TYPE_STORE;
 		
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", ++=[1]"); // [1] I believe since we are sticking it back into memory, TODO check other switch cases. 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ); 
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", ++=[1]"); // [1] I believe since we are sticking it back into memory, TODO check other switch cases. 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ); 
 		break;
 	
 	//LSR
 	case 0x48:
 		op->type = R_ANAL_OP_TYPE_SHR;
 
-		r_strbuf_set (&op->esil,  "1,a,&,C,=,1,a,>>=");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZC); 
+		// r_strbuf_set (&op->esil,  "1,a,&,C,=,1,a,>>=");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZC); 
 		break;
 	case 0x49:
 	case 0x59:
 	case 0x58:
 		op->type = R_ANAL_OP_TYPE_SHR;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  "t, =, 1, t , &, C, =, 1, t, >>="); // TODO need to check where it stores this
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZC); 
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  "t, =, 1, t , &, C, =, 1, t, >>="); // TODO need to check where it stores this
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZC); 
 		break;
 
 	// MUL
 	case 0x5B:
 		op->type = R_ANAL_OP_TYPE_MUL; // TODO check this
 
-		r_strbuf_set (&op->esil,  "y, a, *, ya, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ); 
+		// r_strbuf_set (&op->esil,  "y, a, *, ya, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ); 
 		break;
 
 	// OR
@@ -332,9 +312,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x74:
 		op->type = R_ANAL_OP_TYPE_OR;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", a, |="); 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", a, |="); 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;		
 
 	// ROL
@@ -366,9 +346,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x4C:
 		 // TODO  op->type = R_ANAL_OP_TYPE_OR;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", 0, -"); 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", 0, -"); 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;		
 
 	// XCN, exchange nibbles in A
@@ -376,7 +356,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		 // TODO  op->type =R_ANAL_OP_TYPE_OR;
 		// TODO, t=a, a << 4, t >> 4, a += t
 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;		
 
 	// LDA
@@ -390,16 +370,16 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xD4:
 		op->type = R_ANAL_OP_TYPE_LOAD;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", a, ="); 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", a, ="); 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// LDM
 	case 0xE4:
 		op->type = R_ANAL_OP_TYPE_LOAD;
 
-		r_strbuf_set (&op->esil, "%s, dp, =[1]", data[1]); // TODO fix dp
+		// r_strbuf_set (&op->esil, "%s, dp, =[1]", data[1]); // TODO fix dp
 		break;	
 		
 	// LDX
@@ -409,9 +389,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xDC:
 		op->type = R_ANAL_OP_TYPE_LOAD;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", x, ="); 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", x, ="); 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 		
 	// LDY
@@ -421,9 +401,9 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xD8:
 		op->type = R_ANAL_OP_TYPE_LOAD;
 
-		r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
-		r_strbuf_append (&op->esil,  ", y, ="); 
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil,  _MC81F4204_mem_access[_MC81F4204_esil[i].memType], data[1]);
+		// r_strbuf_append (&op->esil,  ", y, ="); 
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// STA
@@ -437,7 +417,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xFB:
 		op->type = R_ANAL_OP_TYPE_STORE;
 
-		r_strbuf_set (&op->esil, "a, mem, =[1]", data[1]); // TODO fix mem
+		// r_strbuf_set (&op->esil, "a, mem, =[1]", data[1]); // TODO fix mem
 		break;	
 
 	// STX
@@ -446,7 +426,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xFC:
 		op->type = R_ANAL_OP_TYPE_STORE;
 
-		r_strbuf_set (&op->esil, "x, mem, =[1]", data[1]); // TODO fix mem
+		// r_strbuf_set (&op->esil, "x, mem, =[1]", data[1]); // TODO fix mem
 		break;	
 
 	// STY
@@ -455,69 +435,69 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xF8:
 		op->type = R_ANAL_OP_TYPE_STORE;
 
-		r_strbuf_set (&op->esil, "y, mem, =[1]", data[1]); // TODO fix mem
+		// r_strbuf_set (&op->esil, "y, mem, =[1]", data[1]); // TODO fix mem
 		break;	
 
 	// TAX transfer A to X
 	case 0xE8:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "a, x, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil, "a, x, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// TAY
-	case 0xE8:
+	case 0x9F:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "a, y, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil, "a, y, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// TSPX 
-	case 0xE8:
+	case 0xAE:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "sp, x, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil, "sp, x, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// TXA 
-	case 0xE8:
+	case 0xC8:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "x, a, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil, "x, a, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// TXSP
-	case 0xE8:
+	case 0x8E:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "x, sp, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil, "x, sp, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// TYA
-	case 0xE8:
+	case 0xBF:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "y, a, =");
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil, "y, a, =");
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// XAX Exchange A and X
-	case 0xE8:
+	case 0xEE:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "a, t, =, x, a, =, t, x, =");
+		// r_strbuf_set (&op->esil, "a, t, =, x, a, =, t, x, =");
 		break;	
 
 	// XAY
-	case 0xE8:
+	case 0xDE:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "a, t, =, y, a, =, t, y, =");
+		// r_strbuf_set (&op->esil, "a, t, =, y, a, =, t, y, =");
 		break;	
 
 	// XMA
@@ -526,15 +506,15 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xBB:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "a, t, =, mem, a, =, t,mem, ="); // TODO fix mem
-		_MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// r_strbuf_set (&op->esil, "a, t, =, mem, a, =, t,mem, ="); // TODO fix mem
+		// _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;	
 
 	// XYX
-	case 0xE8:
+	case 0xFE:
 		op->type = R_ANAL_OP_TYPE_MOV;
 
-		r_strbuf_set (&op->esil, "x, t, =, y, x, =, t, y, =");
+		// r_strbuf_set (&op->esil, "x, t, =, y, x, =, t, y, =");
 		break;	
 
 	// ADDW 16bit opcode
@@ -550,7 +530,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		op->type = R_ANAL_OP_TYPE_CMP;
 
 		// TODO
-		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZC);
+		// // _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZC);
 		break;
 		
 	// DECW
@@ -558,7 +538,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		op->type = R_ANAL_OP_TYPE_STORE;
 
 		// TODO
-		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// // _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;
 		
 	// INCW
@@ -566,7 +546,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		op->type = R_ANAL_OP_TYPE_STORE;
 
 		// TODO
-		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// // _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;
 		
 	// LDYA
@@ -574,7 +554,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		op->type = R_ANAL_OP_TYPE_LOAD;
 
 		// TODO
-		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// // _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;
 		
 	// STYA
@@ -634,21 +614,21 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x20:
 		op->type = R_ANAL_OP_TYPE_STORE;
 
-		r_strbuf_set (&op->esil, "0, c, ="); 
+		// r_strbuf_set (&op->esil, "0, c, ="); 
 		break;
 	
 	// CLRG
-	case 0x20:
+	case 0x40:
 		op->type = R_ANAL_OP_TYPE_STORE;
 
-		r_strbuf_set (&op->esil, "0, g, ="); 
+		// r_strbuf_set (&op->esil, "0, g, ="); 
 		break;
 	
 	// CLRV
-	case 0x20:
+	case 0x80:
 		op->type = R_ANAL_OP_TYPE_STORE;
 
-		r_strbuf_set (&op->esil, "0, v, ="); 
+		// r_strbuf_set (&op->esil, "0, v, ="); 
 		break;
 	
 	// EOR1
@@ -668,7 +648,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		break;
 
 	// NOT1
-	case 0xCB:
+	case 0x4B:
 		op->type = R_ANAL_OP_TYPE_STORE;
 		// TODO function to determine M
 
@@ -700,14 +680,14 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0xA0:
 		op->type = R_ANAL_OP_TYPE_STORE; // TODO 6502 has these as NOPs and updates flags
 
-		r_strbuf_set (&op->esil, "1, c, ="); 
+		// r_strbuf_set (&op->esil, "1, c, ="); 
 		break;
 	
 	// SETG
 	case 0xC0:
 		op->type = R_ANAL_OP_TYPE_STORE;
 
-		r_strbuf_set (&op->esil, "1, g, ="); 
+		// r_strbuf_set (&op->esil, "1, g, ="); 
 		break;
 
 	// STC, Store C Flag
@@ -722,7 +702,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		op->type = R_ANAL_OP_TYPE_CMP;
 		// TODO
 
-		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// // _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;
 
 	// TSET1
@@ -730,7 +710,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		op->type = R_ANAL_OP_TYPE_CMP;
 		// TODO
 
-		// _MC81F4204_anal_update_flags(op, _6502_FLAGS_NZ);
+		// // _MC81F4204_anal_update_flags(op, _MC81F4204_FLAGS_NZ);
 		break;
 
 	// BBC
@@ -835,15 +815,6 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		// TODO jump code
 		break;
 
-	// BCC
-	case 0x50:
-		op->type = R_ANAL_OP_TYPE_CJMP;
-		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
-		op->fail = addr + op->size;
-		
-		// TODO jump code
-		break;
-
 	// BRA, branch always
 	case 0x2F:
 		op->type = R_ANAL_OP_TYPE_JMP;
@@ -875,13 +846,13 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		op->type = R_ANAL_OP_TYPE_CALL;
 		op->stackop = R_ANAL_STACK_INC;
 		op->stackptr = 2;
-		op->jump = (data[1] + (data[2] << 8);
+		op->jump = _MC81F4204_determine_jmp_addr(data[1], data[2]);
 
 		// TODO call code
 		break;
 		
 	// CALL dp
-	case 0x3B:
+	case 0x5F:
 		op->type = R_ANAL_OP_TYPE_UCALL; // unknown call 
 		op->stackop = R_ANAL_STACK_INC;
 		op->stackptr = 2;
@@ -911,7 +882,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	// JMP
 	case 0x1B:
 		op->type = R_ANAL_OP_TYPE_JMP;
-		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		op->jump = _MC81F4204_determine_jmp_addr(data[1], data[2]);
 		
 		// TODO jump code
 		break;
@@ -920,14 +891,13 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 	case 0x1F:
 	case 0x3F:
 		op->type = R_ANAL_OP_TYPE_UJMP; // unknown jump
-		op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
+		
 		
 		// TODO jump code
 		break;
 
 	// PCALL
-	case 0x1F:
-	case 0x3F:
+	case 0x4F:
 		op->type = R_ANAL_OP_TYPE_UCALL; // Change if able to determine how to read P call address
 		//op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
 		op->stackop = R_ANAL_STACK_INC;
@@ -937,8 +907,22 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 		break;
 
 	// TCALL
-	case 0x1F:
-	case 0x3F:
+	case 0x0A:
+	case 0x1A:
+	case 0x2A:
+	case 0x3A:
+	case 0x4A:
+	case 0x5A:
+	case 0x6A:
+	case 0x7A:
+	case 0x8A:
+	case 0x9A:
+	case 0xAA:
+	case 0xBA:
+	case 0xCA:
+	case 0xDA:
+	case 0xEA:
+	case 0xFA:
 		op->type = R_ANAL_OP_TYPE_UCALL; // Change if able to determine how to read T call address
 		//op->jump = rel_jmp_addr(addr + op->size, data[op->size - 1]);
 		op->stackop = R_ANAL_STACK_INC;
@@ -959,23 +943,23 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 
 	// DI
 	case 0x60:
-		op->type = R_ANAL_OP_TYPE_STORE: // Should these be NOPs
+		op->type = R_ANAL_OP_TYPE_STORE; // Should these be NOPs
 		
-		r_strbuf_set (&op->esil, "0, i, ="); 
+		// r_strbuf_set (&op->esil, "0, i, ="); 
 		break;
 
 	// EI
 	case 0xE0:
-		op->type = R_ANAL_OP_TYPE_STORE:
+		op->type = R_ANAL_OP_TYPE_STORE;
 		
-		r_strbuf_set (&op->esil, "1, i, ="); 
+		// r_strbuf_set (&op->esil, "1, i, ="); 
 		break;
 
 	// NOP
 	case 0xFF:
-		op->type = R_ANAL_OP_TYPE_NOP:
+		op->type = R_ANAL_OP_TYPE_NOP;
 		
-		r_strbuf_set (&op->esil, "1, i, ="); 
+		// r_strbuf_set (&op->esil, "1, i, ="); 
 		break;
 
 	// POP
@@ -1072,7 +1056,7 @@ static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, i
 
 static int esil_MC81F4204_fini (RAnalEsil *esil) {
 	return true;
-}
+};
 
 RAnalPlugin r_anal_plugin_MC81F4204 = {
 	.name = "MC81F4204",
@@ -1093,3 +1077,4 @@ R_API RLibStruct radare_plugin = {
 	.data = &r_anal_plugin_MC81F4204,
 	.version = R2_VERSION
 };
+#endif

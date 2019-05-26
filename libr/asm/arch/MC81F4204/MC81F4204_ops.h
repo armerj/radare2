@@ -315,18 +315,18 @@ static _MC81F4204_op_t _MC81F4204_ops[] = {
 
     // Branch and Jump
     // Manual doesn't seem to say, but looks like fail should be faster than success, so manual lists as fail/success
-    {0x50, OP_BCC, "bcc [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2}, // rel jump, need to get current position to determine jump to location
-    {0xd0, OP_BCS, "bcs [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2},
-    {0xf0, OP_BEQ, "beq [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2},
-    {0x90, OP_BMI, "bmi [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2},
-    {0x70, OP_BNE, "bne [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2},
-    {0x10, OP_BPL, "bpl [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2},
-    {0x2f, OP_BRA, "bra [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 0},
-    {0x30, OP_BVC, "bvc [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2},
-    {0xb0, OP_BVS, "bvs [0x%04x]", 2, REL_JMP, NO_MASK, 4, 0, 2},
+    {0x50, OP_BCC, "bcc 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2}, // rel jump, need to get current position to determine jump to location
+    {0xd0, OP_BCS, "bcs 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2},
+    {0xf0, OP_BEQ, "beq 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2},
+    {0x90, OP_BMI, "bmi 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2},
+    {0x70, OP_BNE, "bne 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2},
+    {0x10, OP_BPL, "bpl 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2},
+    {0x2f, OP_BRA, "bra 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 0},
+    {0x30, OP_BVC, "bvc 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2},
+    {0xb0, OP_BVS, "bvs 0x%04x", 2, REL_JMP, NO_MASK, 4, 0, 2},
 
     // call
-    {0x3b, OP_CALL, "call [0x%04x]", 3, NO_FLAGS, NO_MASK, 8, 0, 0},
+    {0x3b, OP_CALL, "call 0x%04x", 3, NO_FLAGS, NO_MASK, 8, 0, 0},
     {0x5f, OP_CALL, "call word [rpr + 0x%02x]", 2, NO_FLAGS, NO_MASK, 8, 1, 0}, 
 
     // cmp and branch
@@ -338,9 +338,9 @@ static _MC81F4204_op_t _MC81F4204_ops[] = {
     {0x7b, OP_DBNE, "dbne Y, [0x%04x]", 2, REL_JMP, NO_MASK, 6, 0, 4},
 
     // JMP
-    {0x1b, OP_JMP, "jmp [0x%04x]", 3, NO_FLAGS, NO_MASK, 3, 0, 0}, 
-    {0x1f, OP_JMP, "jmp [ [0x%04x] ]", 3, NO_FLAGS, NO_MASK, 5, 3, 0}, 
-    {0x3f, OP_JMP, "jmp [ [rpr + 0x%02x] ]", 2, NO_FLAGS, NO_MASK, 4, 1, 0}, 
+    {0x1b, OP_JMP, "jmp 0x%04x", 3, NO_FLAGS, NO_MASK, 3, 0, 0}, 
+    {0x1f, OP_JMP, "jmp word [0x%04x] ", 3, NO_FLAGS, NO_MASK, 5, 3, 0}, 
+    {0x3f, OP_JMP, "jmp word [rpr + 0x%02x]", 2, NO_FLAGS, NO_MASK, 4, 1, 0}, 
 
     // PCALL
     {0x4f, OP_PCALL, "pcall [upage + 0x%02x]", 2, NO_FLAGS, NO_MASK, 6, 0, 0},
