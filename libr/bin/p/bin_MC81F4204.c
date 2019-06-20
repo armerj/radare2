@@ -4,8 +4,36 @@
 #include <r_lib.h>
 #include "MC81F4204/MC81F4204_specs.h"
 
+
+// **** copy
+static bool check_bytes(const ut8 *buf, ut64 length) {
+	if (!buf || length < 3) {
+		return false;
+	}
+	return (!memcmp (buf, MC81F4204_MAGIC, 3)); // maybe we should put both
+}
+
+static bool load_bytes(RBinFile *bf, void **bin_obj, const ut8 *buf, ut64 sz, ut64 loadaddr, Sdb *sdb){
+	return check_bytes (buf, sz);
+}
+
+static void *load_buffer(RBinFile *bf, RBuffer *buf, ut64 loadaddr, Sdb *sdb) {
+	ut64 tmpsz;
+	const ut8 *tmp = r_buf_data (buf, &tmpsz);
+	if (!check_bytes (tmp, tmpsz)) {
+		return NULL;
+	}
+	return r_buf_new ();
+}
+// ****
+
+
 static RBinInfo *info(RBinFile *bf) {
 	RBinInfo *ret = NULL;
+
+    if (!(ret = R_NEW0 (RBinInfo))) {
+		return NULL;
+	}
 	
 	ret->file = strdup (bf->file);
 	ret->type = strdup ("ROM");
@@ -16,33 +44,24 @@ static RBinInfo *info(RBinFile *bf) {
 	return ret;
 }
 
-static void addsym(RList *ret, MC81F4204_symbol *symbol) {
-	RBinSymbol *ptr = R_NEW0 (RBinSymbol);
-	if (!ptr) {
-		return;
-	}
-	ptr->name = symbol->name;
-	ptr->paddr = ptr->vaddr = addr;
-	ptr->size = size;
-	ptr->ordinal = 0;
-	r_list_append (ret, ptr);
-}
-
 static RList* symbols(RBinFile *bf) { // make array and loop
 	RList *ret = NULL;
-	RBinSymbol *ptr;
-	if (!(ret = r_list_newf (free))) {
+	if (!(ret = r_list_new ())) {
 		return NULL;
 	}
 
 	for (ut8 i = 0; i <= 18; i++) {
+	    RBinSymbol *ptr = NULL;
 		if (!(ptr = R_NEW0 (RBinSymbol))) {
 			return ret;
 		}
 
-		ptr->name = MC81F4204_symbols_table[i]->name;
-		ptr->paddr = ptr->vaddr = MC81F4204_symbols_table[i]->addr;
-		ptr->size = MC81F4204_symbols_table[i]->size;
+		ptr->name = r_str_new(_MC81F4204_symbols_table[i].name);
+		ptr->paddr = _MC81F4204_symbols_table[i].addr - 0xF000;
+        ptr->vaddr = _MC81F4204_symbols_table[i].addr;
+		ptr->size = _MC81F4204_symbols_table[i].size;
+
+		r_list_append (ret, ptr);
 	}
 
 	// TODO read beginning of firmware (Should we assume reset is 0xF000?), look for jump to main
@@ -56,9 +75,6 @@ static RList* symbols(RBinFile *bf) { // make array and loop
 
 static RList* sections(RBinFile *bf) {
 	RList *ret = NULL;
-	RBinSection *ptr = NULL;
-	ines_hdr ihdr;
-	memset (&ihdr, 0, INES_HDR_SIZE);
 	
 	if (!(ret = r_list_new ())) {
 		return NULL;
@@ -66,15 +82,16 @@ static RList* sections(RBinFile *bf) {
 
 
 	for (ut8 i = 0; i <= 3; i++) {
+	    RBinSection *ptr = NULL;
 		if (!(ptr = R_NEW0 (RBinSection))) {
 			return ret;
 		}
 
-		ptr->name = MC81F4204_sections_table[i]->name;
-		ptr->paddr = ptr->vaddr = MC81F4204_sections_table[i]->paddr;
-		ptr->size = MC81F4204_sections_table[i]->size;
-		ptr->vaddr = ptr->vaddr = MC81F4204_sections_table[i]->vaddr;
-		ptr->vsize = MC81F4204_sections_table[i]->vsize;
+		ptr->name = r_str_new(_MC81F4204_sections_table[i].name);
+		ptr->paddr = _MC81F4204_sections_table[i].paddr;
+		ptr->size = _MC81F4204_sections_table[i].size;
+		ptr->vaddr = _MC81F4204_sections_table[i].vaddr;
+		ptr->vsize = _MC81F4204_sections_table[i].vsize;
 		ptr->perm = R_PERM_RX;
 		ptr->add = true;
 		r_list_append (ret, ptr);
@@ -91,7 +108,7 @@ static RList* sections(RBinFile *bf) {
 
 static RList *mem(RBinFile *bf) {
 	RList *ret;
-	RBinMem *m, *n;
+	RBinMem *m;
 
 	if (!(ret = r_list_new ())) {
 		return NULL;
@@ -115,7 +132,7 @@ static RList *mem(RBinFile *bf) {
 static RList* entries(RBinFile *bf) { 
 	RList *ret;
 	RBinAddr *ptr = NULL;
-	ut16 *start_addr;
+	ut16 start_addr;
 	memset (&start_addr, 0, 2);
 
 	if (!(ret = r_list_new ())) {
@@ -125,11 +142,11 @@ static RList* entries(RBinFile *bf) {
 		return ret;
 	}
 
-	r_buf_read_at (bf->buf, RESET_VECTOR_ADDRESS, &start_addr,2); // boot up code, may not necessarily be user code
-	ptr->vaddr = (start_addr[1] << 8) | start_addr[0];
-	ptr->paddr = ptr->vaddr - 0xF000;
+	r_buf_read_at (bf->buf, RESET_VECTOR_ADDRESS_PHYSICAL, (ut8*)&start_addr,2); // boot up code, may not necessarily be user code
 	ptr->vaddr = start_addr;
+	ptr->paddr = start_addr - 0xF000;
 	r_list_append (ret, ptr);
+
 	return ret;
 }
 
@@ -138,14 +155,17 @@ static ut64 baddr(RBinFile *bf) {
 	return 0;
 }
 
-RBinPlugin r_bin_plugin_nes = {
+RBinPlugin r_bin_plugin_MC81F4204 = {
 	.name = "MC81F4204",
 	.desc = "MC81F4204 firmware format",
 	.license = "",
 	.baddr = &baddr,
 	.entries = &entries,
-	.sections = sections,
+	.sections = &sections,
 	.symbols = &symbols,
+	.load_bytes = &load_bytes,
+	.load_buffer = &load_buffer,
+	.check_bytes = &check_bytes,
 	.info = &info,
 	.mem = &mem,
 };

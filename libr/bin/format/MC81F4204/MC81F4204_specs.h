@@ -7,15 +7,17 @@
 #define	RAM_START_ADDRESS	0x0000
 #define	RAM_SIZE	0x010F
 
-#define	RESET_VECTOR_ADDRESS	0xFFFE
+#define	RESET_VECTOR_ADDRESS_PHYSICAL	0x0FFE
+#define MC81F4204_MAGIC "\x60\x1e\x00"
 
-struct {
+
+typedef struct {
 	char* name;
 	ut16 addr;
 	ut16 size;
-} MC81F4204_symbol;
+} _MC81F4204_symbol;
 
-MC81F4204_symbol MC81F4204_symbols_table[] {
+static _MC81F4204_symbol _MC81F4204_symbols_table[] = {
 	{"RESET_VECTOR_START_ADDRESS", 0xFFFE, 2},
 	{"IRQ_VECTOR_START_ADDRESS", 0xFFE0, 2},
 	{"PCALL_START_ADDRESS", 0xFF00, 2},
@@ -35,21 +37,21 @@ MC81F4204_symbol MC81F4204_symbols_table[] {
 	{"TCALL_13_ADDRESS", 0xFFC4, 2},
 	{"TCALL_14_ADDRESS", 0xFFC2, 2},
 	{"TCALL_15_ADDRESS", 0xFFC0, 2}
-}
+};
 
-struct {
+typedef struct {
 	char* name;
 	ut16 paddr;
 	ut16 size;
 	ut16 vaddr;
 	ut16 vsize;
-} MC81F4204_section;
+} _MC81F4204_section;
 
-MC81F4204_section MC81F4204_sections_table[] {
+static _MC81F4204_section _MC81F4204_sections_table[] = {
 	{"ROM", 0x0, 0x0EFF, 0xF000, 0x0EFF},
 	{"PCALL_TABLE", 0x0F00, 0xC0, 0xFF00, 0xC0},
 	{"TCALL_TABLE", 0x0FC0, 0x20, 0xFFC0, 0x20},
-	{"INTERRUPTS", 0x0FE0, 0x20, 0xFFE0, 0x20},
-}
+	{"INTERRUPTS", 0x0FE0, 0x20, 0xFFE0, 0x20}
+};
 
 #endif
