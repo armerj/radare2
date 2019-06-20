@@ -96,7 +96,7 @@ static void _MC81F4204_anal_update_flags(RAnalOp *op, int flags) {
 
 
 static int _MC81F4204_determine_jmp_addr(ut8 lpc, ut8 hpc) { // Change after virtual addr is enabled
-    return 0x0FFF & ((hpc << 8) | lpc);
+    return (hpc << 8) | lpc; //0x0FFF & ((hpc << 8) | lpc);
 }
 
 static int _MC81F4204_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len, RAnalOpMask mask) {
