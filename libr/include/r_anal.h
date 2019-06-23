@@ -1938,6 +1938,7 @@ extern RAnalPlugin r_anal_plugin_xap;
 extern RAnalPlugin r_anal_plugin_xcore_cs;
 extern RAnalPlugin r_anal_plugin_xtensa;
 extern RAnalPlugin r_anal_plugin_z80;
+extern RAnalPlugin r_anal_plugin_MC81F4204;
 #ifdef __cplusplus
 }
 #endif
