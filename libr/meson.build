@@ -46,6 +46,7 @@ anal_plugins = [
   'x86_cs',
   'xap',
   'xcore_cs',
+  'MC81F4204',
   'xtensa',
   'z80',
 ]
@@ -110,6 +111,7 @@ asm_plugins = [
   'x86_nz',
   'xap',
   'xcore_cs',
+  'MC81F4204',
   'xtensa',
   'z80',
 ]

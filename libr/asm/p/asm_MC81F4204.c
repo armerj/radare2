@@ -6,7 +6,8 @@
 #include <r_lib.h>
 #include <r_asm.h>
 
-#include <MC81F4204_disas.h>
+// #include <MC81F4204_disas.h>
+#include "../../asm/arch/MC81F4204/MC81F4204_ops.h"
 
 static int _disassemble(RAsm *a, RAsmOp *op, ut8 *buf, ut64 len) {
     int dlen = _MC81F4204_disas(a->pc, op, buf, len);

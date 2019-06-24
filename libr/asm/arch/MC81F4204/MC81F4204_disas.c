@@ -5,9 +5,8 @@
 #include "MC81F4204_ops.h"
 #include "MC81F4204_disas.h"
 
-static const char *_MC81F4204_regs[] = {
+// static const char *_MC81F4204_regs[] = {};  // MSVC does not like this
 
-};
 
 int _MC81F4204_disas(ut64 pc, RAsmOp *op, const ut8 *buf, ut64 len) {
     int i = 0; // index of op in op array
